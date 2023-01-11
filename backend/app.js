@@ -7,11 +7,11 @@ mongoose.set('strictQuery', false)
 require('express-async-errors')
 const axios = require('axios')
 const cheerio = require('cheerio')
-//const { default: PQueue } = require('p-queue')
 
 const pilotRouter = require('./controllers/pilots')
 const logger = require('./utils/logger')
 
+//connects to MongoDB database
 logger.info('connecting to', config.MONGODB_URI)
 mongoose.connect(config.MONGODB_URI)
     .then(() => {
@@ -23,18 +23,11 @@ mongoose.connect(config.MONGODB_URI)
 
 
 app.use(cors())
+app.use(express.static('build'))
 app.use(express.json())
 
 app.use('/api/pilots', pilotRouter)
 const Pilot = require('./models/pilot')
-
-//request queue that limits the amount of queries to 90 / min
-//to avoid making too many requests fast (429)
-/*const requestQueue = new PQueue({
-    concurrency: 1,
-    interval: 60000,
-    intervalCap: 90
-})*/
 
 const calculateDistance = drone => {
     const xDiff = 250000 - drone.position[0]
@@ -44,18 +37,13 @@ const calculateDistance = drone => {
 }
 
 const updatePilots = async () => {
-    /*
-    const response = await requestQueue.add(
-        () => axios(config.DRONES_URL),
-        { priority: 1 } //requests for drones are scheduled first
-    )
-    logger.info(response.headers.get('x-ratelimit-remaining'))
-    */
     try {
+        //requests for drone data
         const response = await axios(config.DRONES_URL)
-        const $ = cheerio.load(response.data, {
+        const $ = cheerio.load(response.data, { //cheerio loads xml data
             xmlMode: true
         })
+        //with cheerio the xml data is transformed to an array of drone objects
         const drones = $('drone').toArray().map(drone => {
             return {
                 serialNumber: $(drone).children('serialNumber').text(),
@@ -73,7 +61,7 @@ const updatePilots = async () => {
         for (const drone of violatingDrones) {
             //queries the dabase if that drone has violated before
             const oldPilot = await Pilot.findOne({ droneNumber: drone.serialNumber })
-            if (oldPilot) { //if has been seen before it is updated
+            if (oldPilot) { //if the pilot has been seen before it is updated
                 const shorterDistance = drone.distance < oldPilot.distance
                     ? drone.distance
                     : oldPilot.distance
@@ -106,11 +94,7 @@ const updatePilots = async () => {
                 }
 
                 try {
-                    /*
-                    const response = await requestQueue.add(() =>
-                        axios(config.PILOTS_URL + drone.serialNumber))
-                    logger.info(response.headers.get('x-ratelimit-remaining'))
-                    */
+                    //requests for violating pilot's data
                     const response = await axios(config.PILOTS_URL + drone.serialNumber)
                     const pilot = response.data
                     savePilot({
@@ -122,6 +106,7 @@ const updatePilots = async () => {
                     })
                 } catch (error) {
                     if (error.response.status === 404) {
+                        //for the rare occasion where pilot information is not found
                         savePilot({
                             name: 'No pilot information found',
                             email: '-',
@@ -135,11 +120,11 @@ const updatePilots = async () => {
         }
     } catch (error) {
         if (error.response.status === 429) {
-            logger.error('Too many requests, waiting for 500 ms')
+            logger.error('There were too many requests!')
         }
     }
 }
-
+//makes the requests every two seconds
 setInterval(updatePilots, 2000)
 
 module.exports = app

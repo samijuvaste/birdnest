@@ -12,6 +12,7 @@ const pilotSchema = new mongoose.Schema({
     }
 })
 
+//makes id a string and removes version
 pilotSchema.set('toJSON', {
     transform: (document, returnedObject) => {
         returnedObject.id = returnedObject._id.toString()
@@ -20,7 +21,7 @@ pilotSchema.set('toJSON', {
     }
 })
 
-//mongodb database removes once a minute pilots that haven't beem seen in 10 min
+//mongodb database removes pilots that haven't been seen in 10 min
 pilotSchema.index({ createdAt: 1 }, { expireAfterSeconds: 600 })
 
 module.exports = mongoose.model('Pilot', pilotSchema)
