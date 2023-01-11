@@ -13,7 +13,7 @@ const App = () => {
 
   return (
     <div>
-      <h1>Violating pilots in the last 10 minutes</h1>
+      <h1>Pilots violating the NDZ in the last 10 minutes</h1>
       <ul>
         {pilots.sort((first, second) =>
         Date.parse(second.createdAt) - Date.parse(first.createdAt)
