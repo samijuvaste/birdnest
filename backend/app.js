@@ -51,97 +51,95 @@ const updatePilots = async () => {
     )
     logger.info(response.headers.get('x-ratelimit-remaining'))
     */
-    const response = await axios(config.DRONES_URL)
-    const $ = cheerio.load(response.data, {
-        xmlMode: true
-    })
-    const drones = $('drone').toArray().map(drone => {
-        return {
-            serialNumber: $(drone).children('serialNumber').text(),
-            position: [
-                Number($(drone).children('positionX').text()),
-                Number($(drone).children('positionY').text())
-            ]
-        }
-    })
-    drones.forEach(calculateDistance)
-    const violatingDrones = drones.filter(drone =>
-        drone.distance < 100
-    )
-
-    for (const drone of violatingDrones) {
-        //queries the dabase if that drone has violated before
-        const oldPilot = await Pilot.findOne({ droneNumber: drone.serialNumber })
-        if (oldPilot) { //if has been seen before it is updated
-            const shorterDistance = drone.distance < oldPilot.distance
-                ? drone.distance
-                : oldPilot.distance
-
-            const updates = {
-                distance: shorterDistance,
-                createdAt: new Date()
+    try {
+        const response = await axios(config.DRONES_URL)
+        const $ = cheerio.load(response.data, {
+            xmlMode: true
+        })
+        const drones = $('drone').toArray().map(drone => {
+            return {
+                serialNumber: $(drone).children('serialNumber').text(),
+                position: [
+                    Number($(drone).children('positionX').text()),
+                    Number($(drone).children('positionY').text())
+                ]
             }
+        })
+        drones.forEach(calculateDistance)
+        const violatingDrones = drones.filter(drone =>
+            drone.distance < 100
+        )
 
-            const updatedPilot = await Pilot.findOneAndUpdate(
-                { droneNumber: drone.serialNumber },
-                updates,
-                { new: true }
-            )
-            logger.info('updated pilot:', updatedPilot)
+        for (const drone of violatingDrones) {
+            //queries the dabase if that drone has violated before
+            const oldPilot = await Pilot.findOne({ droneNumber: drone.serialNumber })
+            if (oldPilot) { //if has been seen before it is updated
+                const shorterDistance = drone.distance < oldPilot.distance
+                    ? drone.distance
+                    : oldPilot.distance
 
-        } else {
+                const updates = {
+                    distance: shorterDistance,
+                    createdAt: Date.now()
+                }
 
-            //function that saves given new pilot to database
-            const savePilot = async pilot => {
-                const newPilot = new Pilot({
-                    name: pilot.name,
-                    email: pilot.email,
-                    phoneNumber: pilot.phoneNumber,
-                    distance: pilot.distance,
-                    droneNumber: pilot.droneNumber
-                })
-                const savedPilot = await newPilot.save()
-                logger.info('added pilot:', savedPilot)
-            }
+                const updatedPilot = await Pilot.findOneAndUpdate(
+                    { droneNumber: drone.serialNumber },
+                    updates,
+                    { new: true }
+                )
+                logger.info('updated pilot:', updatedPilot)
 
-            try {
-                /*
-                const response = await requestQueue.add(() =>
-                    axios(config.PILOTS_URL + drone.serialNumber))
-                logger.info(response.headers.get('x-ratelimit-remaining'))
-                */
-                const response = await axios(config.PILOTS_URL + drone.serialNumber)
-                const pilot = response.data
-                savePilot({
-                    name: `${pilot.firstName} ${pilot.lastName}`,
-                    email: pilot.email,
-                    phoneNumber: pilot.phoneNumber,
-                    distance: drone.distance,
-                    droneNumber: drone.serialNumber
-                })
-            } catch (error) {
-                if (error.response.status === 404) {
+            } else {
+
+                //function that saves given new pilot to database
+                const savePilot = async pilot => {
+                    const newPilot = new Pilot({
+                        name: pilot.name,
+                        email: pilot.email,
+                        phoneNumber: pilot.phoneNumber,
+                        distance: pilot.distance,
+                        droneNumber: pilot.droneNumber
+                    })
+                    const savedPilot = await newPilot.save()
+                    logger.info('added pilot:', savedPilot)
+                }
+
+                try {
+                    /*
+                    const response = await requestQueue.add(() =>
+                        axios(config.PILOTS_URL + drone.serialNumber))
+                    logger.info(response.headers.get('x-ratelimit-remaining'))
+                    */
+                    const response = await axios(config.PILOTS_URL + drone.serialNumber)
+                    const pilot = response.data
                     savePilot({
-                        name: 'No pilot information found',
-                        email: '-',
-                        phoneNumber: '-',
+                        name: `${pilot.firstName} ${pilot.lastName}`,
+                        email: pilot.email,
+                        phoneNumber: pilot.phoneNumber,
                         distance: drone.distance,
                         droneNumber: drone.serialNumber
                     })
+                } catch (error) {
+                    if (error.response.status === 404) {
+                        savePilot({
+                            name: 'No pilot information found',
+                            email: '-',
+                            phoneNumber: '-',
+                            distance: drone.distance,
+                            droneNumber: drone.serialNumber
+                        })
+                    } else throw error
                 }
             }
+        }
+    } catch (error) {
+        if (error.response.status === 429) {
+            logger.error('Too many requests, waiting for 500 ms')
         }
     }
 }
 
-setInterval(() => {
-    try {
-        updatePilots()
-    } catch (error) {
-        if (error.response.status === 429) {
-            setTimeout(logger.error('Too many requests!'), 1000)
-        }
-    }
-}, 2000)
+setInterval(updatePilots, 2000)
 
 module.exports = app

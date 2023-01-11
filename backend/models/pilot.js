@@ -8,7 +8,7 @@ const pilotSchema = new mongoose.Schema({
     droneNumber: String,
     createdAt: {
         type: Date,
-        default: Date.now
+        default: Date.now()
     }
 })
 
