@@ -1,5 +1,4 @@
 const Pilot = ({ pilot }) => {
-    //console.log(Date.parse(pilot.createdAt))
     return (
         <li>
             <h3>{ pilot.name }</h3>

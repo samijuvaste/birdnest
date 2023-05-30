@@ -16,7 +16,7 @@ const App = () => {
       <h1>Pilots violating the NDZ in the last 10 minutes</h1>
       <ul>
         {pilots.sort((first, second) =>
-        Date.parse(second.createdAt) - Date.parse(first.createdAt)
+          Date.parse(second.createdAt) - Date.parse(first.createdAt)
         ).map(pilot =>
           <Pilot 
             key={pilot.id}
